@@ -1,3 +1,5 @@
+#pragma once
+
 #include <array>
 #include <stdexcept>
 #include <vector>
@@ -48,7 +50,7 @@ public:
     cerr << "mmu["
       << setfill('0') << setw(4) <<
       hex << loc << dec
-      << "] = " << setfill('4') <<
+      << "] = " << setfill('0') << setw(2) <<
       hex << static_cast<int>(result) << dec << endl;
 
     return result;
@@ -59,10 +61,13 @@ public:
     // return mem[loc];
 
     if (loc <= 0x00ff) {
+      // std::cout << "rom" << std::endl;
       return rom[loc];
     } else if (loc <= 0x014f) {
+      // std::cout << "a" << std::endl;
       return cart[loc]; /* header */
     } else if (loc <= 0x3fff) {
+      // std::cout << "here" << std::endl;
       return cart[loc]; /* rom bank 0 0x150 - 0x3fff */
     } else if (loc <= 0x7fff) {
       /* rom bank switchable 0x4000 - 0x7fff */

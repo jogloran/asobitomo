@@ -1,3 +1,5 @@
+#pragma once
+
 #include "types.h"
 
 #define NOOP [](CPU&) {}
@@ -9,13 +11,19 @@
 }
 
 #define LD_WWORD_d16(wword) [](CPU& cpu) { \
-  cpu.wword = (cpu.mmu[cpu.pc + 1] << 8) | cpu.mmu[cpu.pc]; \
+  cpu.wword = cpu.get_word(); \
   cpu.pc += 2; \
 }
 
 #define LD_ADDR_REG(hi, lo, reg) [](CPU& cpu) { \
   word loc = (cpu.hi << 8) | cpu.lo; \
   cpu.mmu[loc] = cpu.reg; \
+}
+
+#define LD_LOC_SP() [](CPU& cpu) { \
+  word loc = cpu.get_word(); \
+  cpu.mmu[loc] = cpu.sp; \
+  cpu.pc += 2; \
 }
 
 #define INC_WORD(hi, lo) [](CPU& cpu) { \
@@ -101,6 +109,14 @@
   cpu.unset_flags(Zf | Nf | Hf); \
 }
 
+#define RRCA() [](CPU& cpu) { \
+  if (cpu.a & 0x1) { \
+    cpu.set_flags(Cf); \
+  } \
+  cpu.a >>= 1; \
+  cpu.unset_flags(Zf | Nf | Hf); \
+}
+
 #define ADD_WORD_WORD(hi1, lo1, hi2, lo2) [](CPU& cpu) { \
   word hl = (cpu.hi1 << 8) | cpu.lo1; \
   word bc = (cpu.hi2 << 8) | cpu.lo2; \
@@ -108,6 +124,7 @@
   cpu.hi1 = hl >> 8; \
   cpu.lo1 = hl & 0xff; \
   cpu.unset_flags(Nf); \
+  /* set H, C conditionally */ \
 }
 
 #define ADD_WORD_WWORD(hi, lo, wword) [](CPU& cpu) { \
@@ -117,6 +134,7 @@
   cpu.hi = hl >> 8; \
   cpu.lo = hl & 0xff; \
   cpu.unset_flags(Nf); \
+  /* set H, C conditionally */ \
 }
 
 #define LD_REG_LOC(reg, hi, lo) [](CPU& cpu) { \
@@ -164,6 +182,7 @@ LD_HL_SPECIAL_helper(a)
   if ((cond)) { \
     int8_t r8 = static_cast<int8_t>(cpu.mmu[cpu.pc]); \
     cpu.pc += r8 + 1; \
+    cpu.cycles += 4; \
   } else { \
     cpu.pc += 1; \
   } \
@@ -180,7 +199,7 @@ LD_HL_SPECIAL_helper(a)
 }
 
 #define CCF() [](CPU& cpu) { \
-  cpu.C = !cpu.C; \
+  cpu.toggle_flags(Cf); \
   cpu.unset_flags(Nf | Hf); \
 }
 
@@ -217,7 +236,7 @@ ADD_A8_HELPER(a)
 }
 
 #define ADC_A8_HELPER(src) [](CPU& cpu) { \
-  cpu.a += (cpu.src + cpu.C); \
+  cpu.a += (cpu.src + cpu.C()); \
   cpu.unset_flags(Nf); \
   if (cpu.a == 0x0) { \
     cpu.set_flags(Zf); \
@@ -229,7 +248,7 @@ ADD_A8_HELPER(a)
 
 #define ADC_A8_HL_LOC_HELPER() [](CPU& cpu) { \
   word loc = (cpu.h << 8) | cpu.l; \
-  cpu.a += (cpu.mmu[loc] + cpu.C); \
+  cpu.a += (cpu.mmu[loc] + cpu.C()); \
   cpu.unset_flags(Nf); \
   if (cpu.a == 0x0) { \
     cpu.set_flags(Zf); \
@@ -281,7 +300,7 @@ GEN8_HL_LOC_HELPER(op), \
 GEN8_HELPER(op, a)
 
 #define SBC_A8_HELPER(src) [](CPU& cpu) { \
-  cpu.a -= (cpu.src + cpu.C); \
+  cpu.a -= (cpu.src + cpu.C()); \
   cpu.set_flags(Nf); \
   if (cpu.a == 0x0) { \
     cpu.set_flags(Zf); \
@@ -293,7 +312,7 @@ GEN8_HELPER(op, a)
 
 #define SBC_A8_HL_LOC_HELPER() [](CPU& cpu) { \
   word loc = (cpu.h << 8) | cpu.l; \
-  cpu.a -= (cpu.mmu[loc] + cpu.C); \
+  cpu.a -= (cpu.mmu[loc] + cpu.C()); \
   cpu.set_flags(Nf); \
   if (cpu.a == 0x0) { \
     cpu.set_flags(Zf); \
@@ -355,6 +374,7 @@ CP8_HELPER(a)
     word loc = (cpu.mmu[cpu.sp + 1] << 8) | cpu.mmu[cpu.sp + 2]; \
     cpu.sp += 2; \
     cpu.pc = loc; \
+    cpu.cycles += 12; \
   } \
 }
 
@@ -372,8 +392,9 @@ CP8_HELPER(a)
 
 #define JP_COND_a16(cond) [](CPU& cpu) { \
   if (cond) { \
-    word a16 = (cpu.mmu[cpu.pc + 1] << 8) | cpu.mmu[cpu.pc]; \
+    word a16 = cpu.get_word(); \
     cpu.pc = a16; \
+    cpu.cycles += 4; \
   } \
 }
 
@@ -385,13 +406,14 @@ CP8_HELPER(a)
 }
 
 #define CALL_COND_a16(cond) [](CPU& cpu) { \
-  word a16 = (cpu.mmu[cpu.pc + 1] << 8) | cpu.mmu[cpu.pc]; \
+  word a16 = cpu.get_word(); \
   if (cond) { \
     cpu.pc += 2; \
     cpu.mmu[cpu.sp - 1] = cpu.pc >> 8; \
     cpu.mmu[cpu.sp] = cpu.pc & 0xff; \
     cpu.sp -= 2; \
     cpu.pc = a16; \
+    cpu.cycles += 12; \
   } \
 }
 
@@ -411,7 +433,7 @@ CP8_HELPER(a)
 #define ADC_A_d8() [](CPU& cpu) { \
   byte d8 = cpu.mmu[cpu.pc]; \
   cpu.pc += 1; \
-  cpu.a += (d8 + cpu.C); \
+  cpu.a += (d8 + cpu.C()); \
   if (cpu.a == 0x0) { \
     cpu.set_flags(Zf); \
   } else { \
@@ -437,7 +459,7 @@ CP8_HELPER(a)
 #define SBC_A_d8() [](CPU& cpu) { \
   byte d8 = cpu.mmu[cpu.pc]; \
   cpu.pc += 1; \
-  cpu.a -= (d8 + cpu.C); \
+  cpu.a -= (d8 + cpu.C()); \
   cpu.set_flags(Nf); \
   if (cpu.a == 0x0) { \
     cpu.set_flags(Zf); \
@@ -493,13 +515,13 @@ CP8_HELPER(a)
 }
 
 #define LD_A_a16() [](CPU& cpu) { \
-  word a16 = (cpu.mmu[cpu.pc + 1] << 8) | cpu.mmu[cpu.pc]; \
+  word a16 = cpu.get_word(); \
   cpu.pc += 2; \
   cpu.a = cpu.mmu[a16]; \
 }
 
 #define LD_a16_A() [](CPU& cpu) { \
-  word a16 = (cpu.mmu[cpu.pc + 1] << 8) | cpu.mmu[cpu.pc]; \
+  word a16 = cpu.get_word(); \
   cpu.pc += 2; \
   cpu.mmu[a16] = cpu.a; \
 }
@@ -559,17 +581,19 @@ CP8_HELPER(a)
 }
 
 #define RRA() [](CPU& cpu) { \
-   byte C = cpu.C; \
-   cpu.C = cpu.a & 0x1; \
+   if (cpu.a & 0x1) { \
+     cpu.set_flags(Cf); \
+   } else { \
+     cpu.unset_flags(Cf); \
+   } \
    cpu.a >>= 1; \
-   cpu.a |= C << 7; \
+   cpu.a |= cpu.C() << 7; \
    cpu.unset_flags(Zf | Nf | Hf); \
  }
 
  #define RLA() [](CPU& cpu) { \
-   byte C = cpu.C & 0x1; \
    cpu.a <<= 1; \
-   cpu.a |= cpu.C & 0x1; \
+   cpu.a |= cpu.C() & 0x1; \
    cpu.unset_flags(Zf | Nf | Hf); \
  }
 

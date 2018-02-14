@@ -1,5 +1,8 @@
+#pragma once
+
 #include "types.h"
 #include "mmu.h"
+#include "ppu.h"
 #include "cpu_macros.h"
 #include "cpu_bc_macros.h"
 #include <array>
@@ -47,44 +50,39 @@ constexpr long ncycles[NINSTR] = {
 
 class CPU {
 public:
-  CPU(std::string path): a(0), f(0), b(0), c(0), d(0), e(0), h(0), l(0), Z(0), H(0), N(0), C(0),
-    pc(0x0000), sp(0x0000), cycles(0), mmu(path), halted(false) {}
+  CPU(std::string path): a(0), f(0), b(0), c(0), d(0), e(0), h(0), l(0),
+    pc(0x0000), sp(0x0000), cycles(0), mmu(path), ppu(*this), halted(false) {}
 
   enum Flag {
-    Zf = 1 << 4,
-    Hf = 1 << 3,
-    Nf = 1 << 2,
-    Cf = 1 << 1
+    Zf = 1 << 7,
+    Nf = 1 << 6,
+    Hf = 1 << 5,
+    Cf = 1 << 4,
   };
 
+  bool Z() { return (f & Zf) == Zf; }
+  bool N() { return (f & Nf) == Nf; }
+  bool H() { return (f & Hf) == Hf; }
+  bool C() { return (f & Cf) == Cf; }
+
   void unset_flags(int flags) {
-    if (flags & Zf) {
-      Z = 0;
-    }
-    if (flags & Hf) {
-      H = 0;
-    }
-    if (flags & Nf) {
-      N = 0;
-    }
-    if (flags & Cf) {
-      C = 0;
-    }
+    f &= ~flags;
   }
 
   void set_flags(int flags) {
-    if (flags & Zf) {
-      Z = 1;
-    }
-    if (flags & Hf) {
-      H = 1;
-    }
-    if (flags & Nf) {
-      N = 1;
-    }
-    if (flags & Cf) {
-      C = 1;
-    }
+    f |= flags;
+  }
+
+  void toggle_flags(int flags) {
+    f ^= flags;
+  }
+
+  word get_word() {
+    return (mmu[pc + 1] << 8) | mmu[pc];
+  }
+
+  word get_word(byte hi, byte lo) {
+    return (hi << 8) | lo;
   }
 
   void halt() {
@@ -95,38 +93,7 @@ public:
     halted = true;
   }
 
-  void step() {
-    if (halted) {
-      throw std::runtime_error("cpu halted");
-    }
-
-    byte instr = mmu[pc];
-    cout << setfill('0') <<
-      "pc: 0x" << setw(4) << hex << pc << ' ' <<
-      "sp: 0x" <<                   sp << ' ' <<
-      "op: 0x" << setw(2) << hex << static_cast<int>(instr) << ' ' << endl;
-    cout <<
-      "a: " << setw(2) << hex << static_cast<int>(a) << ' ' <<
-      "f: " << setw(2) << hex << static_cast<int>(f) << ' ' <<
-      "b: " << setw(2) << hex << static_cast<int>(b) << ' ' <<
-      "c: " << setw(2) << hex << static_cast<int>(c) << ' ' << endl;
-    cout <<
-      "d: " << setw(2) << hex << static_cast<int>(d) << ' ' <<
-      "e: " << setw(2) << hex << static_cast<int>(e) << ' ' <<
-      "h: " << setw(2) << hex << static_cast<int>(h) << ' ' <<
-      "l: " << setw(2) << hex << static_cast<int>(l) << ' ' << endl;
-    cout <<
-      "Z: " << setw(2) << hex << static_cast<int>(Z) << ' ' <<
-      "N: " << setw(2) << hex << static_cast<int>(N) << ' ' <<
-      "H: " << setw(2) << hex << static_cast<int>(H) << ' ' <<
-      "C: " << setw(2) << hex << static_cast<int>(C) << ' ' << endl;
-
-    ++pc;
-    ops[instr](*this);
-    cycles += ncycles[instr];
-
-    cout << endl;
-  }
+  void step();
   void inst();
 
   void enable_interrupts() {}
@@ -134,11 +101,11 @@ public:
   void disable_interrupts_next_instruction() {}
 
   byte a, f, b, c, d, e, h, l;
-  byte Z, H, N, C;
   word pc, sp;
   long cycles;
 
   MMU mmu;
+  PPU ppu;
   bool halted;
 
   static constexpr size_t NINSTR = 256;

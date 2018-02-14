@@ -23,25 +23,14 @@ std::array<std::function<void(CPU&)>, 256> CPU::ops {
  DEC_REG(b),
  LD_REG_d8(b),
  RLCA(),
- [](CPU& cpu) {
-   word loc = (cpu.mmu[cpu.pc + 1] << 8) | cpu.mmu[cpu.pc + 2];
-   cpu.mmu[loc] = cpu.sp;
-   cpu.pc += 2;
- },
+ LD_LOC_SP(),
  ADD_WORD_WORD(h, l, b, c),
  LD_REG_LOC(a, b, c),
  DEC_WORD(b, c),
  INC_REG(c),
  DEC_REG(c),
  LD_REG_d8(c),
- [](CPU& cpu) {
-   if (cpu.a & 0x1) {
-     cpu.C = 1;
-   }
-   cpu.a >>= 1;
-
-   cpu.unset_flags(Zf | Nf | Hf);
- },
+ RRCA(),
 
  STOP(),
  LD_WORD_d16(d, e),
@@ -60,7 +49,7 @@ std::array<std::function<void(CPU&)>, 256> CPU::ops {
  LD_REG_d8(e),
  RRA(),
 
- JR_COND_r8((cpu.Z == 0)) /* JR NZ */,
+ JR_COND_r8((cpu.Z() == 0)) /* JR NZ */,
  LD_WORD_d16(h, l),
  LD_LOC_REG_AUG(+, h, l, a) /* LD (HL+), A todo */,
  INC_WORD(h, l),
@@ -68,7 +57,7 @@ std::array<std::function<void(CPU&)>, 256> CPU::ops {
  DEC_REG(h),
  LD_REG_d8(h),
  UNIMPL() /* TODO: DAA */,
- JR_COND_r8((cpu.Z != 0)) /* JR Z */,
+ JR_COND_r8((cpu.Z() != 0)) /* JR Z */,
  ADD_WORD_WORD(h, l, h, l),
  LD_REG_LOC_AUG(a, +, h, l) /* LD A, (HL+) */,
  DEC_WORD(h, l),
@@ -77,7 +66,7 @@ std::array<std::function<void(CPU&)>, 256> CPU::ops {
  LD_REG_d8(l),
  CPL() /* CPL */,
 
- JR_COND_r8((cpu.C == 0)) /* todo */,
+ JR_COND_r8((cpu.C() == 0)) /* todo */,
  LD_WWORD_d16(sp),
  LD_LOC_REG_AUG(-, h, l, a) /* LD (HL-),A todo */,
  INC_WWORD(sp),
@@ -85,7 +74,7 @@ std::array<std::function<void(CPU&)>, 256> CPU::ops {
  DEC_ADDR(h, l),
  LD_ADDR_d8(h, l),
  SCF() /* SCF */,
- JR_COND_r8((cpu.C != 0)) /* JR C */,
+ JR_COND_r8((cpu.C() != 0)) /* JR C */,
  ADD_WORD_WWORD(h, l, sp),
  LD_REG_LOC_AUG(a, -, h, l) /* LD A,(HL-) */,
  DEC_WWORD(sp),
@@ -111,36 +100,36 @@ std::array<std::function<void(CPU&)>, 256> CPU::ops {
  GEN8(|),
  CP8(),
 
- RET_COND((cpu.Z == 0)),
+ RET_COND((cpu.Z() == 0)),
  POP_WORD(b, c),
- JP_COND_a16((cpu.Z == 0)),
+ JP_COND_a16((cpu.Z() == 0)),
  JP_COND_a16((true)),
- CALL_COND_a16((cpu.Z == 0)),
+ CALL_COND_a16((cpu.Z() == 0)),
  PUSH_WORD(b, c),
  ADD_A_d8(),
  RST(0x00),
- RET_COND((cpu.Z != 0)),
+ RET_COND((cpu.Z() != 0)),
  RET_COND((true)),
- JP_COND_a16((cpu.Z != 0)),
+ JP_COND_a16((cpu.Z() != 0)),
  CPU::handle_cb /* prefix CB */,
- CALL_COND_a16((cpu.Z != 0)),
+ CALL_COND_a16((cpu.Z() != 0)),
  CALL_COND_a16((true)),
  ADC_A_d8(),
  RST(0x08),
 
- RET_COND((cpu.C == 0)),
+ RET_COND((cpu.C() == 0)),
  POP_WORD(d, e),
- JP_COND_a16((cpu.C == 0)),
+ JP_COND_a16((cpu.C() == 0)),
  INVALID(),
- CALL_COND_a16((cpu.C == 0)),
+ CALL_COND_a16((cpu.C() == 0)),
  PUSH_WORD(d, e),
  SUB_A_d8(),
  RST(0x10),
- RET_COND((cpu.C != 0)),
+ RET_COND((cpu.C() != 0)),
  RETI(),
- JP_COND_a16((cpu.C != 0)),
+ JP_COND_a16((cpu.C() != 0)),
  INVALID(),
- CALL_COND_a16((cpu.C != 0)),
+ CALL_COND_a16((cpu.C() != 0)),
  INVALID(),
  SBC_A_d8(),
  RST(0x18),
@@ -179,3 +168,40 @@ std::array<std::function<void(CPU&)>, 256> CPU::ops {
  CP_d8(),
  RST(0x38),
 };
+
+void CPU::step()  {
+  if (halted) {
+    throw std::runtime_error("cpu halted");
+  }
+
+  byte instr = mmu[pc];
+  cout << setfill('0') <<
+    "pc: 0x" << setw(4) << hex << pc << ' ' <<
+    "sp: 0x" <<                   sp << ' ' <<
+    "op: 0x" << setw(2) << hex << static_cast<int>(instr) << ' ' << endl;
+  cout <<
+    "a: " << setw(2) << hex << static_cast<int>(a) << ' ' <<
+    "f: " << setw(2) << hex << static_cast<int>(f) << ' ' <<
+    "b: " << setw(2) << hex << static_cast<int>(b) << ' ' <<
+    "c: " << setw(2) << hex << static_cast<int>(c) << ' ' << endl;
+  cout <<
+    "d: " << setw(2) << hex << static_cast<int>(d) << ' ' <<
+    "e: " << setw(2) << hex << static_cast<int>(e) << ' ' <<
+    "h: " << setw(2) << hex << static_cast<int>(h) << ' ' <<
+    "l: " << setw(2) << hex << static_cast<int>(l) << ' ' << endl;
+  cout <<
+    "Z: " << setw(2) << hex << static_cast<int>(Z()) << ' ' <<
+    "N: " << setw(2) << hex << static_cast<int>(N()) << ' ' <<
+    "H: " << setw(2) << hex << static_cast<int>(H()) << ' ' <<
+    "C: " << setw(2) << hex << static_cast<int>(C()) << ' ' << endl;
+
+  ++pc;
+
+  long old_cycles = cycles;
+  ops[instr](*this);
+  cycles += ncycles[instr];
+
+  ppu.step(cycles - old_cycles);
+
+  cout << endl;
+}

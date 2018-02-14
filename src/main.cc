@@ -15,4 +15,21 @@ int main() {
   while (!cpu.halted && cpu.pc != 0x100) {
     cpu.step();
   }
+  //
+  int i = 0;
+  while (i++ < 1500000) {
+    cpu.step();
+  }
+
+  std::ofstream out("vram");
+  copy(cpu.mmu.mem.begin() + 0x8000, cpu.mmu.mem.begin() + 0x9000, ostream_iterator<unsigned int>(out, " "));
+  out.close();
+
+  out.open("oam");
+  copy(cpu.mmu.mem.begin() + 0xfe00, cpu.mmu.mem.begin() + 0xfea0, ostream_iterator<unsigned int>(out, " "));
+  out.close();
+
+  out.open("btt");
+  copy(cpu.mmu.mem.begin() + 0x9800, cpu.mmu.mem.begin() + 0x9c00, ostream_iterator<unsigned int>(out, " "));
+  out.close();
 }
