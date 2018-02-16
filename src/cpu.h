@@ -3,10 +3,9 @@
 #include "types.h"
 #include "mmu.h"
 #include "ppu.h"
-#include "cpu_macros.h"
-#include "cpu_bc_macros.h"
 #include <array>
 #include <iomanip>
+#include "flags.h"
 
 constexpr int NINSTR = 256;
 
@@ -52,13 +51,6 @@ class CPU {
 public:
   CPU(std::string path): a(0), f(0), b(0), c(0), d(0), e(0), h(0), l(0),
     pc(0x0000), sp(0x0000), cycles(0), mmu(path), ppu(*this), halted(false) {}
-
-  enum Flag {
-    Zf = 1 << 7,
-    Nf = 1 << 6,
-    Hf = 1 << 5,
-    Cf = 1 << 4,
-  };
 
   bool Z() { return (f & Zf) == Zf; }
   bool N() { return (f & Nf) == Nf; }

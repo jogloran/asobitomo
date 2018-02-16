@@ -6,7 +6,7 @@ class CPU;
 
 class PPU {
 public:
-  PPU(CPU& cpu): line(0), mode(Mode::OAM), ncycles(0), cpu(cpu) {}
+  PPU(CPU& cpu): line(0), mode(Mode::OAM), ncycles(0), vblank_ncycles(0), cpu(cpu) {}
 
   enum class Mode : byte {
     HBLANK = 0,
@@ -17,6 +17,7 @@ public:
 
   void step(long delta) {
     ncycles += delta;
+    vblank_ncycles += delta;
 
 /* 456*144 + 4560 = 70224
  *                                    \
@@ -38,6 +39,8 @@ public:
           mode = Mode::VRAM;
           ncycles -= 80;
         }
+
+        update_stat_register();
         break;
       case Mode::VRAM:
         if (ncycles >= 172) {
@@ -45,36 +48,49 @@ public:
           ncycles -= 172;
 
           // write one row to framebuffer
+          update_stat_register();
         }
+
+        update_stat_register();
+
         break;
       case Mode::HBLANK:
         if (ncycles >= 204) {
           ++line;
           ncycles -= 204;
 
-          if (line == 143) {
+          update_stat_register();
+
+          if (line == 144) {
             mode = Mode::VBLANK;
+            vblank_ncycles = ncycles;
             // last hblank: blit buffer
           } else {
             mode = Mode::OAM;
+            update_stat_register();
           }
         }
         break;
       case Mode::VBLANK:
         // vblank happens every 4560 cycles
-        if (ncycles >= 456) {
-          ncycles = 0;
-          ++line;
+        if (vblank_ncycles >= 456) {
+          vblank_ncycles -= 456;
 
           if (line > 153) {
-            mode = Mode::OAM;
-            line = 0;
+            update_stat_register();
           }
+        }
+
+        if (ncycles >= 4560) {
+          ncycles -= 4560;
+
+          mode = Mode::OAM;
+          line = 0;
+
+          update_stat_register();
         }
         break;
     }
-
-    update_stat_register();
   }
 private:
 
@@ -83,6 +99,7 @@ private:
   byte line;
   Mode mode;
   long ncycles;
+  long vblank_ncycles;
 
   CPU& cpu;
 };

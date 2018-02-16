@@ -1,4 +1,6 @@
 #include "types.h"
+#include "flags.h"
+#include "cpu.h"
 
 #define RLC8() RLC8_helper(b), \
 RLC8_helper(c), \

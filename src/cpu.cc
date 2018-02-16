@@ -1,5 +1,8 @@
 #include "cpu.h"
 
+#include "cpu_macros.h"
+#include "cpu_bc_macros.h"
+
 std::array<std::function<void(CPU&)>, 256> CPU::cb_ops  {
   RLC8(),
   RRC8(),
@@ -168,6 +171,7 @@ std::array<std::function<void(CPU&)>, 256> CPU::ops {
  CP_d8(),
  RST(0x38),
 };
+
 
 void CPU::step()  {
   if (halted) {

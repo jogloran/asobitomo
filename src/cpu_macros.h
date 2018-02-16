@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.h"
+#include "flags.h"
+#include "cpu.h"
 
 #define NOOP [](CPU&) {}
 

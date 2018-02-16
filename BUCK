@@ -15,5 +15,5 @@ cxx_library(
     headers=subdir_glob([
         ('src', '*.h')
     ]),
-    compiler_flags=['-std=c++14'],
+    compiler_flags=['-std=c++14', '-g'],
 )
